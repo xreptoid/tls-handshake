@@ -1,5 +1,6 @@
 #include "./tcp.hpp"
 #include <iostream>
+#include <cstring>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
