@@ -15,7 +15,15 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 add_executable(
-        handshake
-        handshake.cpp
+        tls-handshake
+        main.cpp
         bytes.cpp
+        tls_connection.cpp
+        tls_context.cpp
+        crypto.cpp
+        tcp.cpp
+)
+target_link_libraries(
+        tls-handshake
+        OpenSSL::Crypto
 )
