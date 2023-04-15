@@ -73,25 +73,19 @@ void TLSContext::eat_server_hello(const bytes_t& server_hello) {
     handshake_packets.push_back(server_hello);
 }
 
-std::vector<bytes_t> get_certificates(const std::vector<bytes_t>& packets) {
+std::vector<bytes_t> get_certificates(const bytes_t& packet) {
     std::vector<bytes_t> certs;
-    for (const auto& packet: packets) {
-        if (static_cast<std::uint8_t>(packet[0]) != 0x0B) {
-            continue;
-        }
-
-        int pos = 7;
-        while (pos < packet.size()) {
-            int len = bytes2number(subbytes(packet, pos, 3));
-            certs.push_back(subbytes(packet, pos + 3, len));
-            pos += len + 3;
-        }
+    int pos = 7;
+    while (pos < packet.size()) {
+        int len = bytes2number(subbytes(packet, pos, 3));
+        certs.push_back(subbytes(packet, pos + 3, len));
+        pos += len + 3;
     }
     return certs;
 }
 
 void TLSContext::eat_server_certificates(const bytes_t& certs_packet) {
-    auto certs = get_certificates({certs_packet});
+    auto certs = get_certificates(certs_packet);
     if (certs.empty()) {
         throw std::runtime_error("TLSContext::eat_server_certificates: no certs given");
     }
@@ -123,25 +117,6 @@ void TLSContext::set_master_secret() {
     master_secret = prf(*premaster_secret, make_bytes("master secret") + client_random + server_random, 48);
 }
 
-/* TODO move it to common logic or in get_premaster_packet; fix naming of both of these methoods */
-bytes_t get_client_key_exchange(const bytes_t& msg) {
-    bytes_t header;
-    bytes_t data;
-    header += {0x16};
-    // TLS 1.2
-    header += {0x03, 0x03};
-
-    data += number2bytes(msg.size(), 2);
-    data += msg;
-    data = number2bytes(data.size(), 3) + data;
-    data = bytes_t{0x10} + data;
-
-    header += number2bytes(data.size(), 2);
-    data = header + data;
- 
-    return data;
-}
-
 bytes_t TLSContext::get_client_key_exchange_packet() {
     if (!server_public_key.has_value()) {
         throw std::runtime_error("TLSContext::get_client_key_exchange_packet(): no server_public_key");
@@ -152,7 +127,9 @@ bytes_t TLSContext::get_client_key_exchange_packet() {
 
     auto premaster_secret_encrypted = rsa_encrypt(*server_public_key, *premaster_secret);
     bytes_t packet = number2bytes(premaster_secret_encrypted.size(), 2) + premaster_secret_encrypted;
+    // 0x10 - Client Key exchange
     packet = bytes_t{0x10} + number2bytes(packet.size(), 3) + packet;
+    // 0x16 - Handshake message; 0x0303 - TLSv1.2
     packet = bytes_t{0x16} + bytes_t{0x03, 0x03} + number2bytes(packet.size(), 2) + packet;
 
     if (!premaster_secret_packet_handshake_added) {
