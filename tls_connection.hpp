@@ -17,7 +17,9 @@ public:
     virtual void connect();
     virtual void close();
     virtual void send(const bytes_t&);
-    virtual std::vector<bytes_t> recv();
+    virtual void send(const std::string&);
+    virtual std::vector<bytes_t> recv_bytes();
+    virtual std::vector<std::string> recv();
 
 protected:
     std::string host;

@@ -58,7 +58,7 @@ public:
     virtual bytes_t get_client_hello();
     virtual void eat_server_hello(const bytes_t&);
     virtual void eat_server_certificates(const bytes_t&);
-    virtual void eat_server_done(const bytes_t&);
+    virtual void eat_server_hello_done(const bytes_t&);
 
     virtual bytes_t get_client_key_exchange_packet();
     virtual bytes_t get_change_cipher_spec_packet();

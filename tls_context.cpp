@@ -62,20 +62,20 @@ bytes_t TLSContext::get_client_hello() {
     }
     data = header + data;
     if (!client_hello_handshake_added) {
-        handshake_packets.push_back(subbytes(data, 5, data.size() - 5));
+        handshake_packets.push_back(data);
         client_hello_handshake_added = true;
     }
     return data;
 }
 
 void TLSContext::eat_server_hello(const bytes_t& server_hello) {
-    server_random = subbytes(server_hello, 6, 32);
+    server_random = subbytes(server_hello, 11, 32);
     handshake_packets.push_back(server_hello);
 }
 
 std::vector<bytes_t> get_certificates(const bytes_t& packet) {
     std::vector<bytes_t> certs;
-    int pos = 7;
+    int pos = 12;
     while (pos < packet.size()) {
         int len = bytes2number(subbytes(packet, pos, 3));
         certs.push_back(subbytes(packet, pos + 3, len));
@@ -95,7 +95,7 @@ void TLSContext::eat_server_certificates(const bytes_t& certs_packet) {
     handshake_packets.push_back(certs_packet);
 }
 
-void TLSContext::eat_server_done(const bytes_t& server_done) {
+void TLSContext::eat_server_hello_done(const bytes_t& server_done) {
     handshake_packets.push_back(server_done);
 }
 
@@ -133,7 +133,7 @@ bytes_t TLSContext::get_client_key_exchange_packet() {
     packet = bytes_t{0x16} + bytes_t{0x03, 0x03} + number2bytes(packet.size(), 2) + packet;
 
     if (!premaster_secret_packet_handshake_added) {
-        handshake_packets.push_back(subbytes(packet, 5, packet.size() - 5));
+        handshake_packets.push_back(packet);
         premaster_secret_packet_handshake_added = true;
     }
     return packet;
@@ -158,7 +158,7 @@ bytes_t TLSContext::get_verify_data_packet() {
     }
     bytes_t handshake_sum;
     for (const auto& packet: handshake_packets) {
-        handshake_sum += packet;
+        handshake_sum += subbytes(packet, 5, packet.size() - 5);
     }
     auto handshake_hash = sha256(handshake_sum);
     auto verify_data = bytes_t{0x14, 0x00, 0x00, 0x0C} + prf(master_secret, make_bytes("client finished") + handshake_hash, 12);

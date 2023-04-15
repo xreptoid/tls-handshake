@@ -17,28 +17,6 @@ TLSConnection::~TLSConnection() {
     delete tcp_con;
 }
 
-std::vector<bytes_t> parse_packets(const bytes_t& data) {
-    int i_next_packet = 0;
-    std::vector<bytes_t> packets;
-    while (i_next_packet < data.size()) {
-        auto len = bytes2number(subbytes(data, i_next_packet + 3, 2));
-        packets.push_back(subbytes(data, i_next_packet + 5, len));
-        i_next_packet += 5 + len;
-    }
-    return packets;
-}
-
-std::vector<bytes_t> parse_packets2(const bytes_t& data) {
-    int i_next_packet = 0;
-    std::vector<bytes_t> packets;
-    while (i_next_packet < data.size()) {
-        auto len = bytes2number(subbytes(data, i_next_packet + 3, 2));
-        packets.push_back(subbytes(data, i_next_packet, 5 + len));
-        i_next_packet += 5 + len;
-    }
-    return packets;
-}
-
 void TLSConnection::connect() {
     if (tcp_con) {
         std::cout << "TLSConnection::connect: already connected" << std::endl;
@@ -58,7 +36,7 @@ void TLSConnection::connect() {
     }
     ctx->eat_server_hello(packets1[0]);
     ctx->eat_server_certificates(packets1[1]);
-    ctx->eat_server_done(packets1[2]);
+    ctx->eat_server_hello_done(packets1[2]);
 
     bytes_t packet;
     packet += ctx->get_client_key_exchange_packet();
@@ -97,14 +75,20 @@ std::vector<bytes_t> TLSConnection::recv_packets() {
         data += buf;
         bool is_partial = false;
         while (i_next_packet < data.size()) {
+            if (i_next_packet + 5 > data.size()) {
+                // we have only part of the header
+                is_partial = true;
+                break;
+            }
+            // packet header has length=5, data size is on 3-4th bytes
             auto len = bytes2number(subbytes(data, i_next_packet + 3, 2));
-            int i_start = i_next_packet + 5;
-            int i_fin_excluding = i_start + len;
+            int i_start = i_next_packet;
+            int i_fin_excluding = i_start + 5 + len;
             if (i_fin_excluding > data.size()) {
                 is_partial = true;
                 break;
             }
-            packets.push_back(subbytes(data, i_start, len));
+            packets.push_back(subbytes(data, i_start, 5 + len));
             i_next_packet += 5 + len;
         }
         if (!is_partial) {
@@ -118,11 +102,25 @@ void TLSConnection::send(const bytes_t& data) {
     tcp_con->send(ctx->encrypt_packet(data));
 }
 
-std::vector<bytes_t> TLSConnection::recv() {
-    auto packets_encrypted = parse_packets(tcp_con->recv());
+void TLSConnection::send(const std::string& data) {
+    tcp_con->send(ctx->encrypt_packet(make_bytes(data)));
+}
+
+std::vector<bytes_t> TLSConnection::recv_bytes() {
+    auto packets_encrypted = recv_packets();
     std::vector<bytes_t> packets;
     for (const auto& packet_encrypted: packets_encrypted) {
-        packets.push_back(ctx->decrypt_server_packet(packet_encrypted));
+        auto packet_encrypted_wo_header = subbytes(packet_encrypted, 5, packet_encrypted.size() - 5);
+        packets.push_back(ctx->decrypt_server_packet(packet_encrypted_wo_header));
     }
     return packets;
+}
+
+std::vector<std::string> TLSConnection::recv() {
+    auto packets = recv_bytes();
+    std::vector<std::string> str_packets;
+    for (const auto& packet: packets) {
+        str_packets.emplace_back(packet.data(), packet.data() + packet.size());
+    }
+    return str_packets;
 }
